@@ -53,10 +53,25 @@ class SMTPMailTransport extends MailTransport
 		// Negotiate and fetch a list of server supported extensions, if any
 		$this->extensions = $this->negotiate();
 
+		// If requested STARTTLS, and it is available (both here and the server), and we aren't already using SSL
+		if ($starttls && extension_loaded('openssl') && !empty($this->extensions['STARTTLS']) && !$this->connection->is_secure())
+		{
+			$this->connection->write('STARTTLS');
+			$result = $this->connection->read_response();
+			if ($result['code'] != SMTPConnection::SERVICE_READY)
+				throw new Exception('STARTTLS was not accepted, response code: '.$result['code']);
+
+			// Enable TLS
+			$this->connection->enable_crypto(true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+
+			// Renegotiate now that we have enabled TLS to get a new list of auth methods
+			$this->extensions = $this->negotiate();
+		}
+
 		// If a username and password is given, attempt to authenticate
 		if ($username !== null && $password !== null)
 		{
-			$result = $this->auth($username, $password, $starttls);
+			$result = $this->auth($username, $password);
 			if ($result === false)
 				throw new Exception('Failed to login to SMTP server, invalid credentials.');
 		}
@@ -101,34 +116,16 @@ class SMTPMailTransport extends MailTransport
 		return $extensions;
 	}
 
-	private function auth($username, $password, $starttls = true)
+	private function auth($username, $password)
 	{
-		// If requested STARTTLS, and it is available (both here and the server), and we aren't already using SSL
-		if ($starttls && extension_loaded('openssl') && !empty($this->extensions['STARTTLS']) && !$this->connection->is_secure())
-		{
-			$this->connection->write('STARTTLS');
-			$result = $this->connection->read_response();
-			if ($result['code'] != SMTPConnection::SERVICE_READY)
-				throw new Exception('STARTTLS was not accepted, response code: '.$result['code']);
-
-			// Enable TLS
-			$this->connection->enable_crypto(true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
-
-			// Renegotiate now that we have enabled TLS to get a new list of auth methods
-			$this->extensions = $this->negotiate();
-		}
-
 		// Check if auth is actually supported
 		if (empty($this->extensions['AUTH']))
-			return false;
+			return true;
 
 		$methods = explode(' ', $this->extensions['AUTH']);
 
-		// If we have DIGEST-MD5 available, use it
-		if (in_array('DIGEST-MD5', $methods))
-			$result = $this->authDigestMD5($username, $password);
 		// If we have CRAM-MD5 available, use it
-		else if (in_array('CRAM-MD5', $methods))
+		if (in_array('CRAM-MD5', $methods))
 			$result = $this->authCramMD5($username, $password);
 		// If we have LOGIN available, use it
 		else if (in_array('LOGIN', $methods))
@@ -152,14 +149,20 @@ class SMTPMailTransport extends MailTransport
 		}
 	}
 
-	private function authDigestMD5($username, $password)
-	{
-		// TODO
-	}
-
 	private function authCramMD5($username, $password)
 	{
-		// TODO
+		$this->connection->write('AUTH CRAM-MD5');
+		$result = $this->connection->read_response();
+		if ($result['code'] != 334)
+			throw new Exception('Invalid response to auth attempt: '.$result['code']);
+
+		$challenge = base64_decode($result['value']);
+		$hash = hash_hmac('md5', $challenge, $password);
+		$digest = base64_encode($username.' '.$hash);
+
+		// Send the digest
+		$this->connection->write($digest);
+		return $this->connection->read_response();
 	}
 
 	private function authLogin($username, $password)
