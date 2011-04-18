@@ -204,8 +204,6 @@ class SMTPMailTransport extends MailTransport
 
 		// TODO: Handle UTF8-decoding? TODO: Sanitize?
 
-		// TODO: Handle multiple to, cc, etc
-
 		// Add the to header
 		$headers['To'] = Email::encode_utf8($to);
 

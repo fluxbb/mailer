@@ -38,24 +38,12 @@ class Email
 			'X-Mailer'					=> self::MAILER_TAG,
 		);
 
-		if ($from !== null)
-			$this->headers['From'] = $from;
+		$this->headers['From'] = $from;
 	}
 
 	public function set_reply_to($reply_to)
 	{
 		$this->headers['Reply-To'] = $reply_to;
-
-		// Allow chaining
-		return $this;
-	}
-
-	public function add_cc($cc)
-	{
-		if (!isset($this->headers['Cc']))
-			$this->headers['Cc'] = array();
-
-		$this->headers['Cc'][] = $cc;
 
 		// Allow chaining
 		return $this;
@@ -101,10 +89,12 @@ class Email
 		if (!empty($headers['Subject']))
 			$headers['Subject'] = self::encode_utf8($headers['Subject']);
 
-		// TODO: Handle UTF-8 to/from/cc/reply-to names?
+		// Encode the reply-to as UTF8 if required
+		if (!empty($headers['Reply-To']))
+			$headers['Reply-To'] = self::encode_utf8($headers['Reply-To']);
 
-		if (!empty($headers['Cc']))
-			$headers['Cc'] = implode(',', $headers['Cc']);
+		// Encode the from as UTF8 if required
+		$headers['From'] = self::encode_utf8($headers['From']);
 
 		// Sanitize the headers (values only, keys are assumed to be legitimate!)
 		$headers = array_map(array('Email', 'sanitize_header'), $headers);
