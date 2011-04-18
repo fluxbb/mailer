@@ -192,30 +192,24 @@ class SMTPMailTransport extends MailTransport
 		return $this->connection->read_response();
 	}
 
-	public function send($email, $to)
+	public function send($from, $recipients, $message, $headers)
 	{
-		$message = $email->get_message();
-		$headers = $email->get_headers();
-
-		// TODO: Sanitize $to
-
-		// Extract the from since SMTP wants it explicitly
-		$from = $headers['From'];
-
-		// TODO: Handle UTF8-decoding? TODO: Sanitize?
-
-		// Add the to header
-		$headers['To'] = Email::encode_utf8($to);
-
 		$this->connection->write('MAIL FROM: <'.$from.'>');
 		$result = $this->connection->read_response();
 		if ($result['code'] != SMTPConnection::OKAY)
 			throw new Exception('Invalid response to mail attempt: '.$result['code']);
 
-		$this->connection->write('RCPT TO: <'.$to.'>');
-		$result = $this->connection->read_response();
-		if ($result['code'] != 250 && $result['code'] != 251)
-			throw new Exception('Invalid response to mail attempt: '.$result['code']);
+		// Add all the recipients
+		foreach ($recipients as $recipient)
+		{
+			$this->connection->write('RCPT TO: <'.$recipient.'>');
+			$result = $this->connection->read_response();
+			if ($result['code'] != 250 && $result['code'] != 251)
+				throw new Exception('Invalid response to mail attempt: '.$result['code']);
+		}
+
+		// If we have a Bcc header, unset it so that it isn't sent!
+		unset ($headers['Bcc']);
 
 		// Start with a blank message
 		$data = '';

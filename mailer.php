@@ -42,5 +42,5 @@ abstract class MailTransport
 		return $email;
 	}
 
-	public abstract function send($email, $to);
+	public abstract function send($from, $recipients, $message, $headers);
 }

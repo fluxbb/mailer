@@ -25,10 +25,12 @@ class Email
 
 	private $message;
 	private $headers;
+	private $from;
 	private $mailer;
 
 	public function __construct($from, $mailer)
 	{
+		$this->from = $from;
 		$this->mailer = $mailer;
 
 		$this->message = '';
@@ -37,13 +39,11 @@ class Email
 			'Content-type'				=> 'text/plain; charset=utf-8',
 			'X-Mailer'					=> self::MAILER_TAG,
 		);
-
-		$this->headers['From'] = $from;
 	}
 
 	public function set_reply_to($reply_to)
 	{
-		$this->headers['Reply-To'] = $reply_to;
+		$this->headers['Reply-To'] = self::encode_utf8($reply_to);
 
 		// Allow chaining
 		return $this;
@@ -51,7 +51,7 @@ class Email
 
 	public function set_subject($subject)
 	{
-		$this->headers['Subject'] = $subject;
+		$this->headers['Subject'] = self::encode_utf8($subject);
 
 		// Allow chaining
 		return $this;
@@ -65,7 +65,7 @@ class Email
 		return $this;
 	}
 
-	public function get_message()
+	private function get_message()
 	{
 		// Change \n and \r linefeeds into \r\n
 		$message = preg_replace(array('%(?<!\r)\n%', '%\r(?!\n)%'), "\r\n", $this->message);
@@ -79,31 +79,37 @@ class Email
 		return $message;
 	}
 
-	public function get_headers()
+	private function get_headers()
 	{
-		$headers = array_merge($this->headers, array(
+		return array_merge($this->headers, array(
 			'Date'	=> gmdate('r'),
 		));
+	}
 
-		// Encode the subject as UTF8 if required
-		if (!empty($headers['Subject']))
-			$headers['Subject'] = self::encode_utf8($headers['Subject']);
+	public function send($to, $cc = array(), $bcc = array())
+	{
+		// Make to, cc, and bcc into arrays if they aren't already
+		if (!is_array($to)) $to = array($to);
+		if (!is_array($cc)) $cc = array($cc);
+		if (!is_array($bcc)) $bcc = array($bcc);
 
-		// Encode the reply-to as UTF8 if required
-		if (!empty($headers['Reply-To']))
-			$headers['Reply-To'] = self::encode_utf8($headers['Reply-To']);
+		// Create a list of all recipients
+		$recipients = array_merge($to, $cc, $bcc);
+
+		$message = $this->get_message();
+		$headers = $this->get_headers();
 
 		// Encode the from as UTF8 if required
-		$headers['From'] = self::encode_utf8($headers['From']);
+		$headers['From'] = self::encode_utf8($this->from);
+
+		// Add the to, cc, and bcc headers - don't encode them since they must be a plain email
+		$headers['To'] = implode(', ', $to);
+		$headers['Cc'] = implode(', ', $cc);
+		$headers['Bcc'] = implode(', ', $bcc);
 
 		// Sanitize the headers (values only, keys are assumed to be legitimate!)
 		$headers = array_map(array('Email', 'sanitize_header'), $headers);
 
-		return $headers;
-	}
-
-	public function send($to)
-	{
-		return $this->mailer->send($this, $to);
+		return $this->mailer->send($this->from, $recipients, $message, $headers);
 	}
 }

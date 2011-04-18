@@ -17,18 +17,24 @@ class MailMailTransport extends MailTransport
 	{
 	}
 
-	public function send($email, $to)
+	public function send($from, $recipients, $message, $headers)
 	{
-		$message = $email->get_message();
-		$headers = $email->get_headers();
+		// $recipients is ignored - we use the contents of the to, cc, and bcc headers instead
 
 		// Extract the subject since PHP mail() wants it explicitly
-		if (empty($headers['Subject']))
-			$subject = '';
-		else
+		$subject = '';
+		if (isset($headers['Subject']))
 		{
 			$subject = $headers['Subject'];
 			unset ($headers['Subject']);
+		}
+
+		// Extract the to header since mail() adds this itself
+		$to = null;
+		if (isset($headers['To']))
+		{
+			$to = $headers['To'];
+			unset ($headers['To']);
 		}
 
 		// Start with a blank message
