@@ -282,9 +282,7 @@ class SMTPConnection
 		$this->secure = $secure;
 
 		// Create a socket address
-		$addr = $hostname.':'.$port;
-		if ($this->secure)
-			$addr = 'ssl://'.$addr;
+		$addr = ($this->secure ? 'ssl' : 'tcp').'://'.$hostname.':'.$port;
 
 		$errno = null;
 		$errstr = null;
