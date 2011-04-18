@@ -77,7 +77,7 @@ class SMTPMailTransport extends MailTransport
 		}
 
 		// Check which extensions are enabled, if any
-		$lines = explode("\n", $result['value']);
+		$lines = explode("\r\n", $result['value']);
 		array_shift($lines); // Throw away the first line, it's just a greeting
 
 		$extensions = array();
@@ -309,7 +309,7 @@ class SMTPConnection
 		if ($line === false)
 			return null;
 
-		return rtrim($line, "\n");
+		return rtrim($line, "\r\n");
 	}
 
 	public function read_response()
@@ -327,7 +327,7 @@ class SMTPConnection
 				break;
 		}
 
-		return array('code' => $code, 'value' => implode("\n", $values));
+		return array('code' => $code, 'value' => implode("\r\n", $values));
 	}
 
 	public function write($line)
