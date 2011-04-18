@@ -84,7 +84,7 @@ class Email
 
 		// a single leading . signifies an end of the data, so double any legitimate ones
 		$message = str_replace("\r\n.", "\r\n..", $message);
-		// A single loading . at the start, so prepend another
+		// A single leading . at the start, so prepend another
 		if ($message{0} == '.')
 			$message = '.'.$message;
 

@@ -31,8 +31,13 @@ class MailMailTransport extends MailTransport
 			unset ($headers['Subject']);
 		}
 
-		// TODO: Does this handle multiple to, cc, etc?
+		// Start with a blank message
+		$header_str = '';
 
-		return mail($to, $subject, $message, implode("\r\n", $headers));
+		// Append the header strings
+		foreach ($headers as $key => $value)
+			$header_str .= $key.': '.$value."\r\n";
+
+		return mail($to, $subject, $message, $header_str);
 	}
 }
