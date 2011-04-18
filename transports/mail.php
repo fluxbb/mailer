@@ -36,7 +36,7 @@ class MailMailTransport extends MailTransport
 
 		// Append the header strings
 		foreach ($headers as $key => $value)
-			$header_str .= $key.': '.$value."\r\n";
+			$header_str .= $key.': '.$value.PHP_EOL;
 
 		return mail($to, $subject, $message, $header_str);
 	}
