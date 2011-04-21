@@ -37,13 +37,6 @@ class MailMailTransport extends MailTransport
 			unset ($headers['To']);
 		}
 
-		// Start with a blank message
-		$header_str = '';
-
-		// Append the header strings
-		foreach ($headers as $key => $value)
-			$header_str .= $key.': '.$value.PHP_EOL;
-
-		return mail($to, $subject, $message, $header_str);
+		return mail($to, $subject, $message, Email::create_header_str($headers));
 	}
 }

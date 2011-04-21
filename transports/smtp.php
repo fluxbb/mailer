@@ -218,8 +218,7 @@ class SMTPMailTransport extends MailTransport
 		$data = '';
 
 		// Append the header strings
-		foreach ($headers as $key => $value)
-			$data .= $key.': '.$value."\r\n";
+		$data .= Email::create_header_str($headers);
 
 		// Append the header divider
 		$data .= "\r\n";
