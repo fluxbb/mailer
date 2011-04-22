@@ -26,23 +26,32 @@ class Email
 		return $str;
 	}
 
-	public static function linewrap($message)
+	public static function sanitize_email($email)
 	{
-		return utf8_wordwrap($message, self::LINE_WIDTH, "\r\n", true);
+		return filter_var($email, FILTER_SANITIZE_EMAIL);
 	}
 
-	public static function decode_address($email)
+	public static function decode_address($address)
 	{
-		if (preg_match('%(.+)\s*<(.+)>$%u', $email, $matches))
-			return array(trim($matches[1]), trim($matches[2]));
+		$name = null;
+		$email = $email;
 
-		return array(null, trim($email));
+		if (preg_match('%(.+)\s*<(.+)>$%u', $address, $matches))
+		{
+			$name = trim($matches[1]);
+			$email = $matches[2];
+		}
+
+		// Sanitize the email address part
+		$email = self::sanitize_email($email);
+
+		return array($name, $email);
 	}
 
 	public static function create_header_str($headers)
 	{
 		// Characters that should not occur in a single header
-		$blacklist = array("\n", "\r");
+		$blacklist = array("\n", "\r", "\0");
 		$str = '';
 
 		// Append the header strings
@@ -52,7 +61,7 @@ class Email
 		return $str;
 	}
 
-	public static function get_mime_type($file)
+	private static function get_mime_type($file)
 	{
 		if (extension_loaded('fileinfo'))
 		{
@@ -78,8 +87,6 @@ class Email
 	{
 		list ($this->from_name, $this->from_address) = self::decode_address($from);
 
-		// TODO: Sanitize $from_address
-
 		$this->mailer = $mailer;
 
 		$this->message = '';
@@ -95,6 +102,7 @@ class Email
 
 	public function set_reply_to($reply_to)
 	{
+		$reply_to = self::sanitize_email($reply_to);
 		$this->headers['Reply-To'] = self::encode_utf8($reply_to);
 
 		// Allow chaining
@@ -149,7 +157,7 @@ class Email
 		if ($message{0} == '.')
 			$message = '.'.$message;
 
-		return self::linewrap($message);
+		return utf8_wordwrap($message, self::LINE_WIDTH, "\r\n", true);
 	}
 
 	private function handle_attachments(&$headers, &$message)
@@ -205,7 +213,7 @@ class Email
 			// Add this attachment and its headers
 			$data .= '--'.$boundary."\r\n";
 			$data .= self::create_header_str($headers)."\r\n";
-			$data .= self::linewrap($contents)."\r\n";
+			$data .= wordwrap($contents, self::LINE_WIDTH, "\r\n", true)."\r\n"; // base64 so no need for utf8 support
 		}
 
 		// Terminating boundary
@@ -221,7 +229,10 @@ class Email
 		if (!is_array($cc)) $cc = array($cc);
 		if (!is_array($bcc)) $bcc = array($bcc);
 
-		// TODO: Sanitize recipients and make sure each is just an email, not a name <email>
+		// Sanitize the recipients
+		$to = array_map(array('self', 'sanitize_email'), $to);
+		$cc = array_map(array('self', 'sanitize_email'), $cc);
+		$bcc = array_map(array('self', 'sanitize_email'), $bcc);
 
 		// Create a list of all recipients
 		$recipients = array_merge($to, $cc, $bcc);
