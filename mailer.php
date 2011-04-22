@@ -8,6 +8,9 @@
 if (!defined('MAILER_ROOT'))
 	define('MAILER_ROOT', dirname(__FILE__).'/');
 
+if (!defined('UTF8_CORE') || !defined('UTF8'))
+	throw new Exception('The fluxbb-utf8 module is required for fluxbb-mailer to function properly!');
+
 require MAILER_ROOT.'email.php';
 
 abstract class MailTransport

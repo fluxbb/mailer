@@ -5,15 +5,22 @@
 * License: LGPL - GNU Lesser General Public License (http://www.gnu.org/licenses/lgpl.html)
 */
 
+if (!function_exists('utf8_is_ascii'))
+	require UTF8.'/utils/ascii.php';
+
+if (!function_exists('utf8_wordwrap'))
+	require UTF8.'/functions/wordwrap.php';
+
 class Email
 {
 	const MAILER_TAG = 'FluxBB Mailer';
 	const ATTACHMENT_LIMIT = 10485760; // 10Mb
+	const LINE_WIDTH = 72;
 
 	public static function encode_utf8($str)
 	{
 		// Only encode the string if it does contain UTF8
-		if (preg_match('/(?:[^\x00-\x7F])/', $str))
+		if (!utf8_is_ascii($str))
 			return '=?UTF-8?B?'.base64_encode($str).'?=';
 
 		return $str;
@@ -21,21 +28,26 @@ class Email
 
 	public static function linewrap($message)
 	{
-		return $message; // TODO: linewrap (with utf8 support)
+		return utf8_wordwrap($message, self::LINE_WIDTH, "\r\n", true);
 	}
 
-	public static function sanitize_header($value)
+	public static function decode_address($email)
 	{
-		return str_replace(array("\n", "\r"), '', $value);
+		if (preg_match('%(.+)\s*<(.+)>$%u', $email, $matches))
+			return array(trim($matches[1]), trim($matches[2]));
+
+		return array(null, trim($email));
 	}
 
 	public static function create_header_str($headers)
 	{
+		// Characters that should not occur in a single header
+		$blacklist = array("\n", "\r");
 		$str = '';
 
 		// Append the header strings
 		foreach ($headers as $key => $value)
-			$str .= $key.': '.$value."\r\n";
+			$str .= str_replace($blacklist, '', $key.': '.$value)."\r\n";
 
 		return $str;
 	}
@@ -56,17 +68,23 @@ class Email
 
 	private $message;
 	private $headers;
-	private $from;
+	private $from_name;
+	private $from_address;
 	private $attachments;
+	private $attachment_size;
 	private $mailer;
 
 	public function __construct($from, $mailer)
 	{
-		$this->from = $from;
+		list ($this->from_name, $this->from_address) = self::decode_address($from);
+
+		// TODO: Sanitize $from_address
+
 		$this->mailer = $mailer;
 
 		$this->message = '';
 		$this->attachments = array();
+		$this->attachment_size = 0;
 		$this->headers = array(
 			'MIME-Version'				=> '1.0',
 			'Content-Transfer-Encoding'	=> '8bit',
@@ -101,13 +119,14 @@ class Email
 
 	public function add_attachment($file)
 	{
-		if (!is_readable($file))
+		if (!is_readable($file) || is_dir($file))
 			throw new Exception('Unable to read file: '.$file);
 
 		$size = filesize($file);
-		if ($size > self::ATTACHMENT_LIMIT)
-			throw new Exception('File too large: '.$file);
+		if (($this->attachment_size + $size) > self::ATTACHMENT_LIMIT)
+			throw new Exception('Total attachment size too large.');
 
+		$this->attachment_size += $size;
 		$this->attachments[] = array(
 			'path'		=> $file,
 			'name'		=> basename($file),
@@ -202,6 +221,8 @@ class Email
 		if (!is_array($cc)) $cc = array($cc);
 		if (!is_array($bcc)) $bcc = array($bcc);
 
+		// TODO: Sanitize recipients and make sure each is just an email, not a name <email>
+
 		// Create a list of all recipients
 		$recipients = array_merge($to, $cc, $bcc);
 
@@ -216,16 +237,21 @@ class Email
 		$this->handle_attachments($headers, $message);
 
 		// Add the from address (and encoding as UTF8 if required)
-		$headers['From'] = self::encode_utf8($this->from);
+		if ($this->from_name === null)
+			$headers['From'] = $this->from_address;
+		else
+			$headers['From'] = self::encode_utf8($this->from_name.' <'.$this->from_address.'>');
 
 		// Add the to, cc, and bcc headers - don't encode them since they must be a plain email
-		$headers['To'] = implode(', ', $to);
-		$headers['Cc'] = implode(', ', $cc);
-		$headers['Bcc'] = implode(', ', $bcc);
+		if (!empty($to))
+			$headers['To'] = implode(', ', $to);
 
-		// Sanitize the headers (values only, keys are assumed to be legitimate!)
-		$headers = array_map(array('Email', 'sanitize_header'), $headers);
+		if (!empty($cc))
+			$headers['Cc'] = implode(', ', $cc);
 
-		return $this->mailer->send($this->from, $recipients, $message, $headers);
+		if (!empty($bcc))
+			$headers['Bcc'] = implode(', ', $bcc);
+
+		return $this->mailer->send($this->from_address, $recipients, $message, $headers);
 	}
 }
