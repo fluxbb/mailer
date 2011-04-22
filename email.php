@@ -34,7 +34,7 @@ class Email
 	public static function decode_address($address)
 	{
 		$name = null;
-		$email = $email;
+		$email = $address;
 
 		if (preg_match('%(.+)\s*<(.+)>$%u', $address, $matches))
 		{
@@ -125,6 +125,14 @@ class Email
 		return $this;
 	}
 
+	public function append_body($message)
+	{
+		$this->message .= $message;
+
+		// Allow chaining
+		return $this;
+	}
+
 	public function add_attachment($file)
 	{
 		if (!is_readable($file) || is_dir($file))
@@ -157,7 +165,7 @@ class Email
 		if ($message{0} == '.')
 			$message = '.'.$message;
 
-		return utf8_wordwrap($message, self::LINE_WIDTH, "\r\n", true);
+		return utf8_wordwrap($message, self::LINE_WIDTH, "\r\n");
 	}
 
 	private function handle_attachments(&$headers, &$message)
