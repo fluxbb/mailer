@@ -191,7 +191,7 @@ class SMTPMailTransport extends MailTransport
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Send the username and password
-		$this->connection->write(base64_encode(''.chr(0).$username.chr(0).$password));
+		$this->connection->write(base64_encode("\0".$username."\0".$password));
 		return $this->connection->read_response();
 	}
 
