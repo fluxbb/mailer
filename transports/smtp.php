@@ -164,6 +164,9 @@ class SMTPMailTransport extends MailTransport
 		// Send the digest
 		$this->connection->write($digest);
 		$result = $this->connection->read_response();
+		if ($result['code'] == SMTPConnection::AUTH_SUCCESS || $result['code'] == SMTPConnection::AUTH_FAILURE)
+			return $result;
+
 		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
