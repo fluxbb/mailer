@@ -24,7 +24,7 @@ class SMTPMailTransport extends MailTransport
 	}
 
 	private $connection;
-	private $extensions;
+	private $auth_methods;
 
 	/**
 	* Initialise a new SMTP mailer.
@@ -50,10 +50,10 @@ class SMTPMailTransport extends MailTransport
 			throw new Exception('Invalid connection response code received: '.$result['code']);
 
 		// Negotiate and fetch a list of server supported extensions, if any
-		$this->extensions = $this->negotiate($localhost);
+		$extensions = $this->negotiate($localhost);
 
 		// If requested STARTTLS, and it is available (both here and the server), and we aren't already using SSL
-		if ($starttls && extension_loaded('openssl') && !empty($this->extensions['STARTTLS']) && !$this->connection->is_secure())
+		if ($starttls && extension_loaded('openssl') && !empty($extensions['STARTTLS']) && !$this->connection->is_secure())
 		{
 			$this->connection->write('STARTTLS');
 			$result = $this->connection->read_response();
@@ -64,8 +64,15 @@ class SMTPMailTransport extends MailTransport
 			$this->connection->enable_crypto(true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
 
 			// Renegotiate now that we have enabled TLS to get a new list of auth methods
-			$this->extensions = $this->negotiate($localhost);
+			$extensions = $this->negotiate($localhost);
 		}
+
+		// Extract a list of supported auth methods
+		$this->auth_methods = empty($extensions['AUTH']) ? array() : explode(' ', $extensions['AUTH']);
+
+		// If the server reported a maximum message size, use it
+		if (!empty($extensions['SIZE']))
+			$this->connection->set_maxbuf($extensions['SIZE']);
 
 		// If a username and password is given, attempt to authenticate
 		if ($username !== null && $password !== null)
@@ -118,24 +125,25 @@ class SMTPMailTransport extends MailTransport
 	private function auth($username, $password)
 	{
 		// Check if auth is actually supported
-		if (empty($this->extensions['AUTH']))
+		if (empty($this->auth_methods))
 			return true;
 
-		$methods = explode(' ', $this->extensions['AUTH']);
-
 		// If we have DIGEST-MD5 available, use it
-		if (in_array('DIGEST-MD5', $methods))
+		if (in_array('DIGEST-MD5', $this->auth_methods))
 			$result = $this->authDigestMD5($username, $password);
 		// If we have CRAM-MD5 available, use it
-		else if (in_array('CRAM-MD5', $methods))
+		else if (in_array('CRAM-MD5', $this->auth_methods))
 			$result = $this->authCramMD5($username, $password);
 		// If we have LOGIN available, use it
-		else if (in_array('LOGIN', $methods))
+		else if (in_array('LOGIN', $this->auth_methods))
 			$result = $this->authLogin($username, $password);
 		// Otherwise use PLAIN
-		else if (in_array('PLAIN', $methods))
+		else if (in_array('PLAIN', $this->auth_methods))
 			$result = $this->authPlain($username, $password);
-		// This shouldn't happen since at least PLAIN should be supported
+		// If we get this far we have no options, anonymous allows no auth though
+		else if (in_array('ANONYMOUS', $this->auth_methods))
+			return true;
+		// This shouldn't happen hopefully...
 		else
 			throw new Exception('No supported authentication methods.');
 
@@ -158,54 +166,62 @@ class SMTPMailTransport extends MailTransport
 		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
-		$challenge = base64_decode($result['value']);
-		$digest = base64_encode($this->authDigestMD5_generateDigest($username, $password, $challenge, $this->connection->get_host()));
+		// Parse the challenge and check it was valid
+		$challenge = $this->authDigestMD5_parseChallenge(base64_decode($result['value']));
+		if (empty($challenge))
+			throw new Exception('Received invalid challenge from AUTH DIGEST-MD5 attempt.');
+
+		// If we have a maximum buffer size reported then use it
+		if (!empty($challenge['maxbuf']))
+			$this->connection->set_maxbuf($challenge['maxbuf']);
+
+		// Generate a client nonce
+		$cnonce = uniqid('', true); // Generate a client nonce
+
+		// Check which QOP method to use
+		$qop_methods = explode(',', $challenge['qop']);
+		if (in_array('auth', $qop_methods))
+			$qop_method = 'auth';
+		else
+			throw new Exception('No supported qop method available, server reported: '.$challenge['qop']);
+
+		// Generate the response digest
+		$digest = base64_encode($this->authDigestMD5_generateDigest($username, $password, $challenge['realm'], $challenge['nonce'], $cnonce, $qop_method));
 
 		// Send the digest
 		$this->connection->write($digest);
 		$result = $this->connection->read_response();
-		if ($result['code'] == SMTPConnection::AUTH_SUCCESS || $result['code'] == SMTPConnection::AUTH_FAILURE)
+
+		// We received a negative response so return now
+		if ($result['code'] == SMTPConnection::AUTH_FAILURE)
 			return $result;
 
+		// If we got this far, check it was the correct response and continue
 		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
-			throw new Exception('Invalid response to auth attempt: '.$result['code']);
+			throw new Exception('Invalid response to AUTH DIGEST-MD5 attempt: '.$result['code']);
 
 		// SMTP doesn't allow subsequent authentication so we don't use this step
 		$this->connection->write('');
 		return $this->connection->read_response();
 	}
 
-	private function authDigestMD5_generateDigest($username, $password, $challenge, $host)
+	private function authDigestMD5_generateDigest($username, $password, $realm, $nonce, $cnonce, $qop_method)
 	{
-		// Parse the challenge and check it was valid
-		$challenge = $this->authDigestMD5_parseChallenge($challenge);
-		if (empty($challenge))
-			throw new Exception('Received invalid challenge from AUTH DIGEST-MD5 attempt.');
-
-		$cnonce = uniqid('', true); // Generate a client nonce
-		$digest_uri = 'smtp/'.$host;
-		$counter = '00000001';
-		$qop = 'auth'; // We only support qop method 'auth'
-
-		// Check the server supports auth as a qop method
-		if (!in_array($qop, explode(',', $challenge['qop'])))
-			throw new Exception('Server does not support qop='.$qop.'.');
-
-		$HA1 = md5(md5($username.':'.$challenge['realm'].':'.$password, true).':'.$challenge['nonce'].':'.$cnonce);
-		$HA2 = md5('AUTHENTICATE:'.$digest_uri);
-		$response = md5($HA1.':'.$challenge['nonce'].':'.$counter.':'.$cnonce.':'.$qop.':'.$HA2);
-
 		$digest = array(
 			'username'		=> $username,
-			'realm'			=> $challenge['realm'],
-			'nonce'			=> $challenge['nonce'],
+			'realm'			=> $realm,
+			'nonce'			=> $nonce,
 			'cnonce'		=> $cnonce,
-			'nc'			=> $counter,
-			'qop'			=> $qop,
-			'digest-uri'	=> $digest_uri,
-			'response'		=> $response,
-			'maxbuf'		=> $challenge['maxbuf'],
+			'nc'			=> str_pad(1, 8, '0', STR_PAD_LEFT),
+			'qop'			=> $qop_method,
+			'digest-uri'	=> 'smtp/'.$this->connection->get_host(),
+			'maxbuf'		=> $this->connection->get_maxbuf(),
 		);
+
+		$HA1 = md5(md5($digest['username'].':'.$digest['realm'].':'.$password, true).':'.$digest['nonce'].':'.$digest['cnonce']);
+		$HA2 = md5('AUTHENTICATE:'.$digest['digest-uri'].($digest['qop'] == 'auth' ? '' : str_repeat('0', 32)));
+		$digest['response'] = md5($HA1.':'.$digest['nonce'].':'.$digest['nc'].':'.$digest['cnonce'].':'.$digest['qop'].':'.$HA2);
+		unset ($HA1, $HA2);
 
 		$temp = array();
 		foreach ($digest as $key => $value)
@@ -325,9 +341,6 @@ class SMTPMailTransport extends MailTransport
 		// Append the DATA terminator
 		$data .= '.';
 
-		if (!empty($this->extensions['SIZE']) && (strlen($data) + 2) > $this->extensions['SIZE'])
-			throw new Exception('Message size exceeds server limit: '.(strlen($data) + 2).' > '.$this->extensions['SIZE']);
-
 		// Inform the server we are about to send data
 		$this->connection->write('DATA');
 		$result = $this->connection->read_response();
@@ -374,6 +387,7 @@ class SMTPConnection
 
 	private $addr;
 	private $socket;
+	private $maxbuf;
 
 	public function __construct($hostname, $port, $secure, $timeout)
 	{
@@ -385,6 +399,20 @@ class SMTPConnection
 		$this->socket = stream_socket_client($this->addr, $errno, $errstr, $timeout);
 		if ($this->socket === false)
 			throw new Exception($errstr);
+
+		$this->maxbuf = 65536;
+	}
+
+	public function set_maxbuf($maxbuf)
+	{
+		// Only update if the new limit is smaller than the existing limit
+		if ($maxbuf < $this->maxbuf)
+			$this->maxbuf = $maxbuf;
+	}
+
+	public function get_maxbuf()
+	{
+		return $this->maxbuf;
 	}
 
 	public function is_secure()
@@ -440,6 +468,10 @@ class SMTPConnection
 
 	public function write($line)
 	{
+		// Check the data + newline doesn't exceed the maximium buffer size
+		if (strlen($line) + 2 > $this->maxbuf)
+			throw new Exception('Message size exceeds server limit of '.$this->maxbuf);
+
 		if (self::DEBUG)
 			echo $line.PHP_EOL;
 
