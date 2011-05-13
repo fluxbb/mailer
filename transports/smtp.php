@@ -23,7 +23,6 @@ class SMTPMailTransport extends MailTransport
 		return php_uname('n');
 	}
 
-	private $localhost;
 	private $connection;
 	private $extensions;
 
@@ -36,7 +35,7 @@ class SMTPMailTransport extends MailTransport
 		$port = isset($config['port']) ? $config['port'] : self::DEFAULT_PORT;
 		$ssl = isset($config['ssl']) ? $config['ssl'] : self::DEFAULT_SSL;
 		$timeout = isset($config['timeout']) ? $config['timeout'] : self::DEFAULT_TIMEOUT;
-		$this->localhost = isset($config['localhost']) ? $config['localhost'] : self::get_hostname();
+		$localhost = isset($config['localhost']) ? $config['localhost'] : self::get_hostname();
 
 		$username = isset($config['username']) ? $config['username'] : null;
 		$password = isset($config['password']) ? $config['password'] : null;
@@ -51,7 +50,7 @@ class SMTPMailTransport extends MailTransport
 			throw new Exception('Invalid connection response code received: '.$result['code']);
 
 		// Negotiate and fetch a list of server supported extensions, if any
-		$this->extensions = $this->negotiate();
+		$this->extensions = $this->negotiate($localhost);
 
 		// If requested STARTTLS, and it is available (both here and the server), and we aren't already using SSL
 		if ($starttls && extension_loaded('openssl') && !empty($this->extensions['STARTTLS']) && !$this->connection->is_secure())
@@ -65,7 +64,7 @@ class SMTPMailTransport extends MailTransport
 			$this->connection->enable_crypto(true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
 
 			// Renegotiate now that we have enabled TLS to get a new list of auth methods
-			$this->extensions = $this->negotiate();
+			$this->extensions = $this->negotiate($localhost);
 		}
 
 		// If a username and password is given, attempt to authenticate
@@ -77,15 +76,15 @@ class SMTPMailTransport extends MailTransport
 		}
 	}
 
-	private function negotiate()
+	private function negotiate($localhost)
 	{
 		// Attempt to send EHLO command
-		$this->connection->write('EHLO '.$this->localhost);
+		$this->connection->write('EHLO '.$localhost);
 		$result = $this->connection->read_response();
 		if ($result['code'] != SMTPConnection::OKAY)
 		{
 			// EHLO was rejected, try a HELO
-			$this->connection->write('HELO '.$this->localhost);
+			$this->connection->write('HELO '.$localhost);
 			$result = $this->connection->read_response();
 			if ($result['code'] != SMTPConnection::OKAY)
 				throw new Exception('HELO was not accepted, response code: '.$result['code']);
@@ -124,8 +123,11 @@ class SMTPMailTransport extends MailTransport
 
 		$methods = explode(' ', $this->extensions['AUTH']);
 
+		// If we have DIGEST-MD5 available, use it
+		if (in_array('DIGEST-MD5', $methods))
+			$result = $this->authDigestMD5($username, $password);
 		// If we have CRAM-MD5 available, use it
-		if (in_array('CRAM-MD5', $methods))
+		else if (in_array('CRAM-MD5', $methods))
 			$result = $this->authCramMD5($username, $password);
 		// If we have LOGIN available, use it
 		else if (in_array('LOGIN', $methods))
@@ -141,24 +143,115 @@ class SMTPMailTransport extends MailTransport
 		switch ($result['code'])
 		{
 			// Authentication Succeeded
-			case 235: return true;
+			case SMTPConnection::AUTH_SUCCESS: return true;
 			// Authentication credentials invalid
-			case 535: return false;
+			case SMTPConnection::AUTH_FAILURE: return false;
 			// Other
 			default: throw new Exception('Unrecognized response to auth attempt: '.$result['code']);
 		}
+	}
+
+	private function authDigestMD5($username, $password)
+	{
+		$this->connection->write('AUTH DIGEST-MD5');
+		$result = $this->connection->read_response();
+		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
+			throw new Exception('Invalid response to auth attempt: '.$result['code']);
+
+		$challenge = base64_decode($result['value']);
+		$digest = base64_encode($this->authDigestMD5_generateDigest($username, $password, $challenge, $this->connection->get_host()));
+
+		// Send the digest
+		$this->connection->write($digest);
+		$result = $this->connection->read_response();
+		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
+			throw new Exception('Invalid response to auth attempt: '.$result['code']);
+
+		// SMTP doesn't allow subsequent authentication so we don't use this step
+		$this->connection->write('');
+		return $this->connection->read_response();
+	}
+
+	private function authDigestMD5_generateDigest($username, $password, $challenge, $host)
+	{
+		// Parse the challenge and check it was valid
+		$challenge = $this->authDigestMD5_parseChallenge($challenge);
+		if (empty($challenge))
+			throw new Exception('Received invalid challenge from AUTH DIGEST-MD5 attempt.');
+
+		$cnonce = uniqid('', true); // Generate a client nonce
+		$digest_uri = 'smtp/'.$host;
+		$counter = '00000001';
+		$qop = 'auth'; // We only support qop method 'auth'
+
+		// Check the server supports auth as a qop method
+		if (!in_array($qop, explode(',', $challenge['qop'])))
+			throw new Exception('Server does not support qop='.$qop.'.');
+
+		$HA1 = md5(md5($username.':'.$challenge['realm'].':'.$password, true).':'.$challenge['nonce'].':'.$cnonce);
+		$HA2 = md5('AUTHENTICATE:'.$digest_uri);
+		$response = md5($HA1.':'.$challenge['nonce'].':'.$counter.':'.$cnonce.':'.$qop.':'.$HA2);
+
+		$digest = array(
+			'username'		=> $username,
+			'realm'			=> $challenge['realm'],
+			'nonce'			=> $challenge['nonce'],
+			'cnonce'		=> $cnonce,
+			'nc'			=> $counter,
+			'qop'			=> $qop,
+			'digest-uri'	=> $digest_uri,
+			'response'		=> $response,
+			'maxbuf'		=> $challenge['maxbuf'],
+		);
+
+		$temp = array();
+		foreach ($digest as $key => $value)
+			$temp[] = $key.'="'.$value.'"';
+
+		return implode(',', $temp);
+	}
+
+	private function authDigestMD5_parseChallenge($challenge)
+	{
+		// Attempt to parse the challenge
+		if (!preg_match_all('%([a-z-]+)=("[^"]+(?<!\\\)"|[^,]+)%i', $challenge, $matches, PREG_SET_ORDER))
+			return array();
+
+		$tokens = array();
+		foreach ($matches as $match)
+			$tokens[$match[1]] = trim($match[2], '"');
+
+		// Check for required fields
+		if (empty($tokens['nonce']) || empty($tokens['algorithm']))
+			return array();
+
+		// rfc2831 says to ignore these...
+		unset ($tokens['opaque'], $tokens['domain']);
+
+		// If there's no realm default to blank
+		if (!isset($tokens['realm']))
+			$tokens['realm'] = '';
+
+		// If there's no maximum buffer size, set default
+		if (empty($tokens['maxbuf']))
+			$tokens['maxbuf'] = 65536;
+
+		// If there's no qop default to auth
+		if (empty($tokens['qop']))
+			$tokens['qop'] = 'auth';
+
+		return $tokens;
 	}
 
 	private function authCramMD5($username, $password)
 	{
 		$this->connection->write('AUTH CRAM-MD5');
 		$result = $this->connection->read_response();
-		if ($result['code'] != 334)
+		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		$challenge = base64_decode($result['value']);
-		$hash = hash_hmac('md5', $challenge, $password);
-		$digest = base64_encode($username.' '.$hash);
+		$digest = base64_encode($username.' '.hash_hmac('md5', $challenge, $password));
 
 		// Send the digest
 		$this->connection->write($digest);
@@ -169,13 +262,13 @@ class SMTPMailTransport extends MailTransport
 	{
 		$this->connection->write('AUTH LOGIN');
 		$result = $this->connection->read_response();
-		if ($result['code'] != 334)
+		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Send the username
 		$this->connection->write(base64_encode($username));
 		$result = $this->connection->read_response();
-		if ($result['code'] != 334)
+		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Send the password
@@ -187,7 +280,7 @@ class SMTPMailTransport extends MailTransport
 	{
 		$this->connection->write('AUTH PLAIN');
 		$result = $this->connection->read_response();
-		if ($result['code'] != 334)
+		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Send the username and password
@@ -207,7 +300,7 @@ class SMTPMailTransport extends MailTransport
 		{
 			$this->connection->write('RCPT TO: <'.$recipient.'>');
 			$result = $this->connection->read_response();
-			if ($result['code'] != 250 && $result['code'] != 251)
+			if ($result['code'] != SMTPConnection::OKAY && $result['code'] != SMTPConnection::WILL_FORWARD)
 				throw new Exception('Invalid response to mail attempt: '.$result['code']);
 		}
 
@@ -263,33 +356,47 @@ class SMTPMailTransport extends MailTransport
 
 class SMTPConnection
 {
+	const DEBUG = false;
+
 	// Response codes. See http://www.greenend.org.uk/rjk/2000/05/21/smtp-replies.html
 	const ERROR = -1;
 	const SERVICE_READY = 220;
 	const SERVICE_CLOSING = 221;
+	const AUTH_SUCCESS = 235;
 	const OKAY = 250;
+	const WILL_FORWARD = 251;
+	const SERVER_CHALLENGE = 334;
 	const START_INPUT = 354;
+	const AUTH_FAILURE = 535;
 
+	private $addr;
 	private $socket;
-	private $secure;
 
 	public function __construct($hostname, $port, $secure, $timeout)
 	{
-		$this->secure = $secure;
-
 		// Create a socket address
-		$addr = ($this->secure ? 'ssl' : 'tcp').'://'.$hostname.':'.$port;
+		$this->addr = ($secure ? 'ssl' : 'tcp').'://'.$hostname.':'.$port;
 
 		$errno = null;
 		$errstr = null;
-		$this->socket = stream_socket_client($addr, $errno, $errstr, $timeout);
+		$this->socket = stream_socket_client($this->addr, $errno, $errstr, $timeout);
 		if ($this->socket === false)
 			throw new Exception($errstr);
 	}
 
 	public function is_secure()
 	{
-		return $this->secure;
+		return parse_url($this->addr, PHP_URL_SCHEME) == 'ssl';
+	}
+
+	public function get_host()
+	{
+		return parse_url($this->addr, PHP_URL_HOST);
+	}
+
+	public function get_port()
+	{
+		return parse_url($this->addr, PHP_URL_PORT);
 	}
 
 	public function enable_crypto($enabled, $crypto_type)
@@ -303,7 +410,11 @@ class SMTPConnection
 		if ($line === false)
 			return null;
 
-		return rtrim($line, "\r\n");
+		$line = rtrim($line, "\r\n");
+		if (self::DEBUG)
+			echo $line.PHP_EOL;
+
+		return $line;
 	}
 
 	public function read_response()
@@ -326,6 +437,9 @@ class SMTPConnection
 
 	public function write($line)
 	{
+		if (self::DEBUG)
+			echo $line.PHP_EOL;
+
 		return fwrite($this->socket, $line."\r\n");
 	}
 
