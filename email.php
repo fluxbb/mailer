@@ -102,8 +102,11 @@ class Email
 
 	public function set_reply_to($reply_to)
 	{
-		$reply_to = self::sanitize_email($reply_to);
-		$this->headers['Reply-To'] = self::encode_utf8($reply_to);
+		list ($name, $email) = self::decode_address($reply_to);
+		if ($name === null)
+			$this->headers['Reply-To'] = $email;
+		else
+			$this->headers['Reply-To'] = '"'.self::encode_utf8($name).'" <'.$email.'>';
 
 		// Allow chaining
 		return $this;
@@ -259,7 +262,7 @@ class Email
 		if ($this->from_name === null)
 			$headers['From'] = $this->from_address;
 		else
-			$headers['From'] = self::encode_utf8($this->from_name.' <'.$this->from_address.'>');
+			$headers['From'] = '"'.self::encode_utf8($this->from_name).'" <'.$this->from_address.'>';
 
 		// Add the to, cc, and bcc headers - don't encode them since they must be a plain email
 		if (!empty($to))
