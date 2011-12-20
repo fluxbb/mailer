@@ -13,15 +13,15 @@ if (!defined('UTF8_CORE') || !defined('UTF8'))
 
 require MAILER_ROOT.'email.php';
 
-abstract class MailTransport
+abstract class Flux_Mailer
 {
 	public static final function load($type, $from, $args = array())
 	{
-		if (!class_exists($type.'MailTransport'))
-			require MAILER_ROOT.'transports/'.$type.'.php';
+		if (!class_exists('Flux_Mailer_Transport_'.$type))
+			require MAILER_ROOT.'Transport/'.$type.'.php';
 
 		// Instantiate the transport
-		$type = $type.'MailTransport';
+		$type = 'Flux_Mailer_Transport_'.$type;
 		$mailer = new $type($args);
 
 		// Set the from address for all emails
@@ -34,13 +34,13 @@ abstract class MailTransport
 
 	public function new_email($subject = null, $message = null)
 	{
-		$email = new Email($this->from, $this);
+		$email = new Flux_Email($this->from, $this);
 
 		if ($subject !== null)
-			$email->set_subject($subject);
+			$email->setSubject($subject);
 
 		if ($message !== null)
-			$email->set_body($message);
+			$email->setBody($message);
 
 		return $email;
 	}

@@ -7,7 +7,7 @@
  * License: LGPL - GNU Lesser General Public License (http://www.gnu.org/licenses/lgpl.html)
  */
 
-class SMTPMailTransport extends MailTransport
+class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 {
 	const DEFAULT_HOST = 'localhost';
 	const DEFAULT_PORT = 25;
@@ -15,7 +15,7 @@ class SMTPMailTransport extends MailTransport
 	const DEFAULT_TIMEOUT = 10;
 	const DEFAULT_STARTTLS = true;
 
-	private static function get_hostname()
+	private static function getHostname()
 	{
 		if (function_exists('gethostname'))
 			return gethostname();
@@ -24,7 +24,7 @@ class SMTPMailTransport extends MailTransport
 	}
 
 	private $connection;
-	private $auth_methods;
+	private $authMethods;
 
 	/**
 	* Initialise a new SMTP mailer.
@@ -35,44 +35,44 @@ class SMTPMailTransport extends MailTransport
 		$port = isset($config['port']) ? $config['port'] : self::DEFAULT_PORT;
 		$ssl = isset($config['ssl']) ? $config['ssl'] : self::DEFAULT_SSL;
 		$timeout = isset($config['timeout']) ? $config['timeout'] : self::DEFAULT_TIMEOUT;
-		$localhost = isset($config['localhost']) ? $config['localhost'] : self::get_hostname();
+		$localhost = isset($config['localhost']) ? $config['localhost'] : self::getHostname();
 
 		$username = isset($config['username']) ? $config['username'] : null;
 		$password = isset($config['password']) ? $config['password'] : null;
 		$starttls = isset($config['starttls']) ? $config['starttls'] : self::DEFAULT_STARTTLS;
 
 		// Create connection to the SMTP server
-		$this->connection = new SMTPConnection($host, $port, $ssl, $timeout);
+		$this->connection = new Flux_Mailer_Transport_SMTP_Connection($host, $port, $ssl, $timeout);
 
 		// Check we received a valid welcome message (code 220)
-		$result = $this->connection->read_response();
-		if ($result['code'] != SMTPConnection::SERVICE_READY)
+		$result = $this->connection->readResponse();
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVICE_READY)
 			throw new Exception('Invalid connection response code received: '.$result['code']);
 
 		// Negotiate and fetch a list of server supported extensions, if any
 		$extensions = $this->negotiate($localhost);
 
 		// If requested STARTTLS, and it is available (both here and the server), and we aren't already using SSL
-		if ($starttls && extension_loaded('openssl') && !empty($extensions['STARTTLS']) && !$this->connection->is_secure())
+		if ($starttls && extension_loaded('openssl') && !empty($extensions['STARTTLS']) && !$this->connection->isSecure())
 		{
 			$this->connection->write('STARTTLS');
-			$result = $this->connection->read_response();
-			if ($result['code'] != SMTPConnection::SERVICE_READY)
+			$result = $this->connection->readResponse();
+			if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVICE_READY)
 				throw new Exception('STARTTLS was not accepted, response code: '.$result['code']);
 
 			// Enable TLS
-			$this->connection->enable_crypto(true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+			$this->connection->enableCrypto(true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
 
 			// Renegotiate now that we have enabled TLS to get a new list of auth methods
 			$extensions = $this->negotiate($localhost);
 		}
 
 		// Extract a list of supported auth methods
-		$this->auth_methods = empty($extensions['AUTH']) ? array() : explode(' ', $extensions['AUTH']);
+		$this->authMethods = empty($extensions['AUTH']) ? array() : explode(' ', $extensions['AUTH']);
 
 		// If the server reported a maximum message size, use it
 		if (!empty($extensions['SIZE']))
-			$this->connection->set_maxbuf($extensions['SIZE']);
+			$this->connection->setMaxbuf($extensions['SIZE']);
 
 		// If a username and password is given, attempt to authenticate
 		if ($username !== null && $password !== null)
@@ -87,13 +87,13 @@ class SMTPMailTransport extends MailTransport
 	{
 		// Attempt to send EHLO command
 		$this->connection->write('EHLO '.$localhost);
-		$result = $this->connection->read_response();
-		if ($result['code'] != SMTPConnection::OKAY)
+		$result = $this->connection->readResponse();
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::OKAY)
 		{
 			// EHLO was rejected, try a HELO
 			$this->connection->write('HELO '.$localhost);
-			$result = $this->connection->read_response();
-			if ($result['code'] != SMTPConnection::OKAY)
+			$result = $this->connection->readResponse();
+			if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::OKAY)
 				throw new Exception('HELO was not accepted, response code: '.$result['code']);
 		}
 
@@ -125,23 +125,23 @@ class SMTPMailTransport extends MailTransport
 	private function auth($username, $password)
 	{
 		// Check if auth is actually supported
-		if (empty($this->auth_methods))
+		if (empty($this->authMethods))
 			return true;
 
 		// If we have DIGEST-MD5 available, use it
-		if (in_array('DIGEST-MD5', $this->auth_methods))
+		if (in_array('DIGEST-MD5', $this->authMethods))
 			$result = $this->authDigestMD5($username, $password);
 		// If we have CRAM-MD5 available, use it
-		else if (in_array('CRAM-MD5', $this->auth_methods))
+		else if (in_array('CRAM-MD5', $this->authMethods))
 			$result = $this->authCramMD5($username, $password);
 		// If we have LOGIN available, use it
-		else if (in_array('LOGIN', $this->auth_methods))
+		else if (in_array('LOGIN', $this->authMethods))
 			$result = $this->authLogin($username, $password);
 		// Otherwise use PLAIN
-		else if (in_array('PLAIN', $this->auth_methods))
+		else if (in_array('PLAIN', $this->authMethods))
 			$result = $this->authPlain($username, $password);
 		// If we get this far we have no options, anonymous allows no auth though
-		else if (in_array('ANONYMOUS', $this->auth_methods))
+		else if (in_array('ANONYMOUS', $this->authMethods))
 			return true;
 		// This shouldn't happen hopefully...
 		else
@@ -151,9 +151,9 @@ class SMTPMailTransport extends MailTransport
 		switch ($result['code'])
 		{
 			// Authentication Succeeded
-			case SMTPConnection::AUTH_SUCCESS: return true;
+			case Flux_Mailer_Transport_SMTP_Connection::AUTH_SUCCESS: return true;
 			// Authentication credentials invalid
-			case SMTPConnection::AUTH_FAILURE: return false;
+			case Flux_Mailer_Transport_SMTP_Connection::AUTH_FAILURE: return false;
 			// Other
 			default: throw new Exception('Unrecognized response to auth attempt: '.$result['code']);
 		}
@@ -162,8 +162,8 @@ class SMTPMailTransport extends MailTransport
 	private function authDigestMD5($username, $password)
 	{
 		$this->connection->write('AUTH DIGEST-MD5');
-		$result = $this->connection->read_response();
-		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
+		$result = $this->connection->readResponse();
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Parse the challenge and check it was valid
@@ -173,7 +173,7 @@ class SMTPMailTransport extends MailTransport
 
 		// If we have a maximum buffer size reported then use it
 		if (!empty($challenge['maxbuf']))
-			$this->connection->set_maxbuf($challenge['maxbuf']);
+			$this->connection->setMaxbuf($challenge['maxbuf']);
 
 		// Generate a client nonce
 		$cnonce = uniqid('', true); // Generate a client nonce
@@ -190,19 +190,19 @@ class SMTPMailTransport extends MailTransport
 
 		// Send the digest
 		$this->connection->write($digest);
-		$result = $this->connection->read_response();
+		$result = $this->connection->readResponse();
 
 		// We received a negative response so return now
-		if ($result['code'] == SMTPConnection::AUTH_FAILURE)
+		if ($result['code'] == Flux_Mailer_Transport_SMTP_Connection::AUTH_FAILURE)
 			return $result;
 
 		// If we got this far, check it was the correct response and continue
-		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to AUTH DIGEST-MD5 attempt: '.$result['code']);
 
 		// SMTP doesn't allow subsequent authentication so we don't use this step
 		$this->connection->write('');
-		return $this->connection->read_response();
+		return $this->connection->readResponse();
 	}
 
 	private function authDigestMD5_generateDigest($username, $password, $realm, $nonce, $cnonce, $qop_method)
@@ -214,8 +214,8 @@ class SMTPMailTransport extends MailTransport
 			'cnonce'		=> $cnonce,
 			'nc'			=> str_pad(1, 8, '0', STR_PAD_LEFT),
 			'qop'			=> $qop_method,
-			'digest-uri'	=> 'smtp/'.$this->connection->get_host(),
-			'maxbuf'		=> $this->connection->get_maxbuf(),
+			'digest-uri'	=> 'smtp/'.$this->connection->getHost(),
+			'maxbuf'		=> $this->connection->getMaxbuf(),
 		);
 
 		$HA1 = md5(md5($digest['username'].':'.$digest['realm'].':'.$password, true).':'.$digest['nonce'].':'.$digest['cnonce']);
@@ -265,8 +265,8 @@ class SMTPMailTransport extends MailTransport
 	private function authCramMD5($username, $password)
 	{
 		$this->connection->write('AUTH CRAM-MD5');
-		$result = $this->connection->read_response();
-		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
+		$result = $this->connection->readResponse();
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		$challenge = base64_decode($result['value']);
@@ -274,52 +274,52 @@ class SMTPMailTransport extends MailTransport
 
 		// Send the digest
 		$this->connection->write($digest);
-		return $this->connection->read_response();
+		return $this->connection->readResponse();
 	}
 
 	private function authLogin($username, $password)
 	{
 		$this->connection->write('AUTH LOGIN');
-		$result = $this->connection->read_response();
-		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
+		$result = $this->connection->readResponse();
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Send the username
 		$this->connection->write(base64_encode($username));
-		$result = $this->connection->read_response();
-		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
+		$result = $this->connection->readResponse();
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Send the password
 		$this->connection->write(base64_encode($password));
-		return $this->connection->read_response();
+		return $this->connection->readResponse();
 	}
 
 	private function authPlain($username, $password)
 	{
 		$this->connection->write('AUTH PLAIN');
-		$result = $this->connection->read_response();
-		if ($result['code'] != SMTPConnection::SERVER_CHALLENGE)
+		$result = $this->connection->readResponse();
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Send the username and password
 		$this->connection->write(base64_encode("\0".$username."\0".$password));
-		return $this->connection->read_response();
+		return $this->connection->readResponse();
 	}
 
 	public function send($from, $recipients, $message, $headers)
 	{
 		$this->connection->write('MAIL FROM: <'.$from.'>');
-		$result = $this->connection->read_response();
-		if ($result['code'] != SMTPConnection::OKAY)
+		$result = $this->connection->readResponse();
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::OKAY)
 			throw new Exception('Invalid response to mail attempt: '.$result['code']);
 
 		// Add all the recipients
 		foreach ($recipients as $recipient)
 		{
 			$this->connection->write('RCPT TO: <'.$recipient.'>');
-			$result = $this->connection->read_response();
-			if ($result['code'] != SMTPConnection::OKAY && $result['code'] != SMTPConnection::WILL_FORWARD)
+			$result = $this->connection->readResponse();
+			if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::OKAY && $result['code'] != Flux_Mailer_Transport_SMTP_Connection::WILL_FORWARD)
 				throw new Exception('Invalid response to mail attempt: '.$result['code']);
 		}
 
@@ -330,7 +330,7 @@ class SMTPMailTransport extends MailTransport
 		$data = '';
 
 		// Append the header strings
-		$data .= Email::create_header_str($headers);
+		$data .= Flux_Email::createHeaderStr($headers);
 
 		// Append the header divider
 		$data .= "\r\n";
@@ -343,14 +343,14 @@ class SMTPMailTransport extends MailTransport
 
 		// Inform the server we are about to send data
 		$this->connection->write('DATA');
-		$result = $this->connection->read_response();
-		if ($result['code'] != SMTPConnection::START_INPUT)
+		$result = $this->connection->readResponse();
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::START_INPUT)
 			throw new Exception('Invalid response to data request: '.$result['code']);
 
 		// Send the mail DATA
 		$this->connection->write($data);
-		$result = $this->connection->read_response();
-		if ($result['code'] != SMTPConnection::OKAY)
+		$result = $this->connection->readResponse();
+		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::OKAY)
 			throw new Exception('Invalid response to data terminaton: '.$result['code']);
 
 		return true;
@@ -370,7 +370,7 @@ class SMTPMailTransport extends MailTransport
 	}
 }
 
-class SMTPConnection
+class Flux_Mailer_Transport_SMTP_Connection
 {
 	const DEBUG = false;
 
@@ -403,39 +403,39 @@ class SMTPConnection
 		$this->maxbuf = 65536;
 	}
 
-	public function set_maxbuf($maxbuf)
+	public function setMaxbuf($maxbuf)
 	{
 		// Only update if the new limit is smaller than the existing limit
 		if ($maxbuf < $this->maxbuf)
 			$this->maxbuf = $maxbuf;
 	}
 
-	public function get_maxbuf()
+	public function getMaxbuf()
 	{
 		return $this->maxbuf;
 	}
 
-	public function is_secure()
+	public function isSecure()
 	{
 		return parse_url($this->addr, PHP_URL_SCHEME) == 'ssl';
 	}
 
-	public function get_host()
+	public function getHost()
 	{
 		return parse_url($this->addr, PHP_URL_HOST);
 	}
 
-	public function get_port()
+	public function getPort()
 	{
 		return parse_url($this->addr, PHP_URL_PORT);
 	}
 
-	public function enable_crypto($enabled, $crypto_type)
+	public function enableCrypto($enabled, $crypto_type)
 	{
 		return stream_socket_enable_crypto($this->socket, $enabled, $crypto_type);
 	}
 
-	public function read_line()
+	public function readLine()
 	{
 		$line = fgets($this->socket);
 		if ($line === false)
@@ -448,12 +448,12 @@ class SMTPConnection
 		return $line;
 	}
 
-	public function read_response()
+	public function readResponse()
 	{
 		$code = self::ERROR;
 		$values = array();
 
-		while (($line = $this->read_line()) !== null)
+		while (($line = $this->readLine()) !== null)
 		{
 			$code = intval(substr($line, 0, 3));
 			$values[] = trim(substr($line, 4));

@@ -8,7 +8,7 @@
  * License: LGPL - GNU Lesser General Public License (http://www.gnu.org/licenses/lgpl.html)
  */
 
-class MailMailTransport extends MailTransport
+class Flux_Mailer_Transport_Mail extends Flux_Mailer
 {
 	/**
 	* Initialise a new basic PHP mailer.
@@ -37,6 +37,6 @@ class MailMailTransport extends MailTransport
 			unset ($headers['To']);
 		}
 
-		return mail($to, $subject, $message, Email::create_header_str($headers));
+		return mail($to, $subject, $message, Email::createHeaderStr($headers));
 	}
 }

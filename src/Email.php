@@ -11,13 +11,13 @@ if (!function_exists('utf8_is_ascii'))
 if (!function_exists('utf8_wordwrap'))
 	require UTF8.'/functions/wordwrap.php';
 
-class Email
+class Flux_Email
 {
 	const MAILER_TAG = 'FluxBB Mailer';
 	const ATTACHMENT_LIMIT = 10485760; // 10Mb
 	const LINE_WIDTH = 72;
 
-	public static function encode_utf8($str)
+	public static function encodeUtf8($str)
 	{
 		// Only encode the string if it does contain UTF8
 		if (!utf8_is_ascii($str))
@@ -26,12 +26,12 @@ class Email
 		return $str;
 	}
 
-	public static function sanitize_email($email)
+	public static function sanitizeEmail($email)
 	{
 		return filter_var($email, FILTER_SANITIZE_EMAIL);
 	}
 
-	public static function decode_address($address)
+	public static function decodeAddress($address)
 	{
 		$name = null;
 		$email = $address;
@@ -43,12 +43,12 @@ class Email
 		}
 
 		// Sanitize the email address part
-		$email = self::sanitize_email($email);
+		$email = self::sanitizeEmail($email);
 
 		return array($name, $email);
 	}
 
-	public static function create_header_str($headers)
+	public static function createHeaderStr($headers)
 	{
 		// Characters that should not occur in a single header
 		$blacklist = array("\n", "\r", "\0");
@@ -61,7 +61,7 @@ class Email
 		return $str;
 	}
 
-	private static function get_mime_type($file)
+	private static function getMimeType($file)
 	{
 		if (extension_loaded('fileinfo'))
 		{
@@ -77,21 +77,21 @@ class Email
 
 	private $message;
 	private $headers;
-	private $from_name;
-	private $from_address;
+	private $fromName;
+	private $fromAddress;
 	private $attachments;
-	private $attachment_size;
+	private $attachmentSize;
 	private $mailer;
 
 	public function __construct($from, $mailer)
 	{
-		list ($this->from_name, $this->from_address) = self::decode_address($from);
+		list ($this->fromName, $this->fromAddress) = self::decodeAddress($from);
 
 		$this->mailer = $mailer;
 
 		$this->message = '';
 		$this->attachments = array();
-		$this->attachment_size = 0;
+		$this->attachmentSize = 0;
 		$this->headers = array(
 			'MIME-Version'				=> '1.0',
 			'Content-Transfer-Encoding'	=> '8bit',
@@ -100,27 +100,27 @@ class Email
 		);
 	}
 
-	public function set_reply_to($reply_to)
+	public function setReplyTo($reply_to)
 	{
-		list ($name, $email) = self::decode_address($reply_to);
+		list ($name, $email) = self::decodeAddress($reply_to);
 		if ($name === null)
 			$this->headers['Reply-To'] = $email;
 		else
-			$this->headers['Reply-To'] = '"'.self::encode_utf8($name).'" <'.$email.'>';
+			$this->headers['Reply-To'] = '"'.self::encodeUtf8($name).'" <'.$email.'>';
 
 		// Allow chaining
 		return $this;
 	}
 
-	public function set_subject($subject)
+	public function setSubject($subject)
 	{
-		$this->headers['Subject'] = self::encode_utf8($subject);
+		$this->headers['Subject'] = self::encodeUtf8($subject);
 
 		// Allow chaining
 		return $this;
 	}
 
-	public function set_body($message)
+	public function setBody($message)
 	{
 		$this->message = $message;
 
@@ -128,7 +128,7 @@ class Email
 		return $this;
 	}
 
-	public function append_body($message)
+	public function appendBody($message)
 	{
 		$this->message .= $message;
 
@@ -136,28 +136,28 @@ class Email
 		return $this;
 	}
 
-	public function add_attachment($file)
+	public function addAttachment($file)
 	{
 		if (!is_readable($file) || is_dir($file))
 			throw new Exception('Unable to read file: '.$file);
 
 		$size = filesize($file);
-		if (($this->attachment_size + $size) > self::ATTACHMENT_LIMIT)
+		if (($this->attachmentSize + $size) > self::ATTACHMENT_LIMIT)
 			throw new Exception('Total attachment size too large.');
 
-		$this->attachment_size += $size;
+		$this->attachmentSize += $size;
 		$this->attachments[] = array(
 			'path'		=> $file,
 			'name'		=> basename($file),
 			'size'		=> $size,
-			'mime'		=> self::get_mime_type($file),
+			'mime'		=> self::getMimeType($file),
 		);
 
 		// Allow chaining
 		return $this;
 	}
 
-	private function get_message()
+	private function getMessage()
 	{
 		// Change \n and \r linefeeds into \r\n
 		$message = preg_replace(array('%(?<!\r)\n%', '%\r(?!\n)%'), "\r\n", $this->message);
@@ -171,7 +171,7 @@ class Email
 		return utf8_wordwrap($message, self::LINE_WIDTH, "\r\n");
 	}
 
-	private function handle_attachments(&$headers, &$message)
+	private function handleAttachments(&$headers, &$message)
 	{
 		if (empty($this->attachments))
 			return false;
@@ -180,7 +180,7 @@ class Email
 		$boundary = uniqid();
 
 		// Create a new message split into sections with the correct headers and attachments appended
-		$message = $this->insert_attachments($headers['Content-Type'], $headers['Content-Transfer-Encoding'], $message, $boundary);
+		$message = $this->insertAttachments($headers['Content-Type'], $headers['Content-Transfer-Encoding'], $message, $boundary);
 		unset ($headers['Content-Type'], $headers['Content-Transfer-Encoding']);
 
 		// Set the headers to indicate we have multipart data
@@ -190,7 +190,7 @@ class Email
 		return $boundary;
 	}
 
-	private function insert_attachments($message_type, $message_encoding, $message, $boundary)
+	private function insertAttachments($message_type, $message_encoding, $message, $boundary)
 	{
 		// Create headers for the actual email message
 		$headers = array(
@@ -200,7 +200,7 @@ class Email
 
 		// Add the actual email message and its headers
 		$data  = '--'.$boundary."\r\n";
-		$data .= self::create_header_str($headers)."\r\n";
+		$data .= self::createHeaderStr($headers)."\r\n";
 		$data .= $message."\r\n"; // No need to linewrap since it already should be wrapped
 
 		// Add each attachment
@@ -223,7 +223,7 @@ class Email
 
 			// Add this attachment and its headers
 			$data .= '--'.$boundary."\r\n";
-			$data .= self::create_header_str($headers)."\r\n";
+			$data .= self::createHeaderStr($headers)."\r\n";
 			$data .= wordwrap($contents, self::LINE_WIDTH, "\r\n", true)."\r\n"; // base64 so no need for utf8 support
 		}
 
@@ -241,14 +241,14 @@ class Email
 		if (!is_array($bcc)) $bcc = array($bcc);
 
 		// Sanitize the recipients
-		$to = array_map(array('self', 'sanitize_email'), $to);
-		$cc = array_map(array('self', 'sanitize_email'), $cc);
-		$bcc = array_map(array('self', 'sanitize_email'), $bcc);
+		$to = array_map(array('self', 'sanitizeEmail'), $to);
+		$cc = array_map(array('self', 'sanitizeEmail'), $cc);
+		$bcc = array_map(array('self', 'sanitizeEmail'), $bcc);
 
 		// Create a list of all recipients
 		$recipients = array_merge($to, $cc, $bcc);
 
-		$message = $this->get_message();
+		$message = $this->getMessage();
 
 		// Create a copy of the headers and add in the current date
 		$headers = array_merge($this->headers, array(
@@ -256,13 +256,13 @@ class Email
 		));
 
 		// Insert any attachments
-		$this->handle_attachments($headers, $message);
+		$this->handleAttachments($headers, $message);
 
 		// Add the from address (and encoding as UTF8 if required)
-		if ($this->from_name === null)
-			$headers['From'] = $this->from_address;
+		if ($this->fromName === null)
+			$headers['From'] = $this->fromAddress;
 		else
-			$headers['From'] = '"'.self::encode_utf8($this->from_name).'" <'.$this->from_address.'>';
+			$headers['From'] = '"'.self::encodeUtf8($this->fromName).'" <'.$this->fromAddress.'>';
 
 		// Add the to, cc, and bcc headers - don't encode them since they must be a plain email
 		if (!empty($to))
@@ -274,6 +274,6 @@ class Email
 		if (!empty($bcc))
 			$headers['Bcc'] = implode(', ', $bcc);
 
-		return $this->mailer->send($this->from_address, $recipients, $message, $headers);
+		return $this->mailer->send($this->fromAddress, $recipients, $message, $headers);
 	}
 }
