@@ -52,7 +52,7 @@ abstract class Flux_Mailer
 
 	private $from;
 
-	public function new_email($subject = null, $message = null)
+	public function newEmail($subject = null, $message = null)
 	{
 		$email = new Flux_Mailer_Email($this->from, $this);
 
