@@ -31,14 +31,14 @@ if (!defined('MAILER_ROOT'))
 if (!defined('UTF8_CORE') || !defined('UTF8'))
 	throw new Exception('The fluxbb-utf8 module is required for fluxbb-mailer to function properly!');
 
-require MAILER_ROOT.'email.php';
+require MAILER_ROOT.'Mailer/Email.php';
 
 abstract class Flux_Mailer
 {
 	public static final function load($type, $from, $args = array())
 	{
 		if (!class_exists('Flux_Mailer_Transport_'.$type))
-			require MAILER_ROOT.'Transport/'.$type.'.php';
+			require MAILER_ROOT.'Mailer/Transport/'.$type.'.php';
 
 		// Instantiate the transport
 		$type = 'Flux_Mailer_Transport_'.$type;
@@ -54,7 +54,7 @@ abstract class Flux_Mailer
 
 	public function new_email($subject = null, $message = null)
 	{
-		$email = new Flux_Email($this->from, $this);
+		$email = new Flux_Mailer_Email($this->from, $this);
 
 		if ($subject !== null)
 			$email->setSubject($subject);

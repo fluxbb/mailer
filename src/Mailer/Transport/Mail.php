@@ -57,6 +57,6 @@ class Flux_Mailer_Transport_Mail extends Flux_Mailer
 			unset ($headers['To']);
 		}
 
-		return mail($to, $subject, $message, Flux_Email::createHeaderStr($headers));
+		return mail($to, $subject, $message, Flux_Mailer_Email::createHeaderStr($headers));
 	}
 }

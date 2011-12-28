@@ -35,7 +35,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 	const DEFAULT_TIMEOUT = 10;
 	const DEFAULT_STARTTLS = true;
 
-	private static function getHostname()
+	private static function getHostName()
 	{
 		if (function_exists('gethostname'))
 			return gethostname();
@@ -55,7 +55,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		$port = isset($config['port']) ? $config['port'] : self::DEFAULT_PORT;
 		$ssl = isset($config['ssl']) ? $config['ssl'] : self::DEFAULT_SSL;
 		$timeout = isset($config['timeout']) ? $config['timeout'] : self::DEFAULT_TIMEOUT;
-		$localhost = isset($config['localhost']) ? $config['localhost'] : self::getHostname();
+		$localhost = isset($config['localhost']) ? $config['localhost'] : self::getHostName();
 
 		$username = isset($config['username']) ? $config['username'] : null;
 		$password = isset($config['password']) ? $config['password'] : null;
@@ -350,7 +350,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		$data = '';
 
 		// Append the header strings
-		$data .= Flux_Email::createHeaderStr($headers);
+		$data .= Flux_Mailer_Email::createHeaderStr($headers);
 
 		// Append the header divider
 		$data .= "\r\n";
