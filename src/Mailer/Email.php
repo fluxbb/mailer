@@ -31,7 +31,7 @@ if (!function_exists('utf8_is_ascii'))
 if (!function_exists('utf8_wordwrap'))
 	require UTF8.'/functions/wordwrap.php';
 
-class Flux_Email
+class Flux_Mailer_Email
 {
 	const MAILER_TAG = 'FluxBB Mailer';
 	const ATTACHMENT_LIMIT = 10485760; // 10Mb
@@ -86,13 +86,13 @@ class Flux_Email
 		if (extension_loaded('fileinfo'))
 		{
 			$finfo = finfo_open(FILEINFO_MIME_TYPE);
-			$mime_type = finfo_file($finfo, $file);
+			$mimeType = finfo_file($finfo, $file);
 			finfo_close($finfo);
 		}
 		else
-			$mime_type = @mime_content_type($file);
+			$mimeType = @mime_content_type($file);
 
-		return $mime_type;
+		return $mimeType;
 	}
 
 	private $message;
@@ -120,9 +120,9 @@ class Flux_Email
 		);
 	}
 
-	public function setReplyTo($reply_to)
+	public function setReplyTo($replyTo)
 	{
-		list ($name, $email) = self::decodeAddress($reply_to);
+		list ($name, $email) = self::decodeAddress($replyTo);
 		if ($name === null)
 			$this->headers['Reply-To'] = $email;
 		else
@@ -210,12 +210,12 @@ class Flux_Email
 		return $boundary;
 	}
 
-	private function insertAttachments($message_type, $message_encoding, $message, $boundary)
+	private function insertAttachments($messageType, $messageEncoding, $message, $boundary)
 	{
 		// Create headers for the actual email message
 		$headers = array(
-			'Content-Type'					=> $message_type,
-			'Content-Transfer-Encoding'		=> $message_encoding,
+			'Content-Type'					=> $messageType,
+			'Content-Transfer-Encoding'		=> $messageEncoding,
 		);
 
 		// Add the actual email message and its headers

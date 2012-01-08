@@ -199,14 +199,14 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		$cnonce = uniqid('', true); // Generate a client nonce
 
 		// Check which QOP method to use
-		$qop_methods = explode(',', $challenge['qop']);
-		if (in_array('auth', $qop_methods))
-			$qop_method = 'auth';
+		$qopMethods = explode(',', $challenge['qop']);
+		if (in_array('auth', $qopMethods))
+			$qopMethod = 'auth';
 		else
 			throw new Exception('No supported qop method available, server reported: '.$challenge['qop']);
 
 		// Generate the response digest
-		$digest = base64_encode($this->authDigestMD5_generateDigest($username, $password, $challenge['realm'], $challenge['nonce'], $cnonce, $qop_method));
+		$digest = base64_encode($this->authDigestMD5_generateDigest($username, $password, $challenge['realm'], $challenge['nonce'], $cnonce, $qopMethod));
 
 		// Send the digest
 		$this->connection->write($digest);
@@ -225,7 +225,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		return $this->connection->readResponse();
 	}
 
-	private function authDigestMD5_generateDigest($username, $password, $realm, $nonce, $cnonce, $qop_method)
+	private function authDigestMD5_generateDigest($username, $password, $realm, $nonce, $cnonce, $qopMethod)
 	{
 		$digest = array(
 			'username'		=> $username,
@@ -233,7 +233,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 			'nonce'			=> $nonce,
 			'cnonce'		=> $cnonce,
 			'nc'			=> str_pad(1, 8, '0', STR_PAD_LEFT),
-			'qop'			=> $qop_method,
+			'qop'			=> $qopMethod,
 			'digest-uri'	=> 'smtp/'.$this->connection->getHost(),
 			'maxbuf'		=> $this->connection->getMaxbuf(),
 		);
