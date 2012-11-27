@@ -1,8 +1,7 @@
 <?php
 /**
- * FluxBB
- *
- * LICENSE
+ * FluxBB Mailer - Lightweight email library with transport abstraction
+ * Copyright (C) 2011-2012 FluxBB.org
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -19,29 +18,19 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * @category	FluxBB
- * @package		Flux_Mailer
- * @copyright	Copyright (c) 2011 FluxBB (http://fluxbb.org)
+ * @package		Mailer
+ * @copyright	Copyright (c) 2011-2012 FluxBB (http://fluxbb.org)
  * @license		http://www.gnu.org/licenses/lgpl.html	GNU Lesser General Public License
  */
 
+namespace FluxBB\Mailer;
 
-if (!defined('MAILER_ROOT'))
-	define('MAILER_ROOT', dirname(__FILE__).'/');
-
-if (!defined('UTF8_CORE') || !defined('UTF8'))
-	throw new Exception('The fluxbb-utf8 module is required for fluxbb-mailer to function properly!');
-
-require MAILER_ROOT.'Mailer/Email.php';
-
-abstract class Flux_Mailer
+abstract class Mailer
 {
 	public static final function load($type, $from, $args = array())
 	{
-		if (!class_exists('Flux_Mailer_Transport_'.$type))
-			require MAILER_ROOT.'Mailer/Transport/'.$type.'.php';
-
 		// Instantiate the transport
-		$type = 'Flux_Mailer_Transport_'.$type;
+		$type = 'FluxBB\\Mailer\\Transport\\'.$type;
 		$mailer = new $type($args);
 
 		// Set the from address for all emails
@@ -54,7 +43,7 @@ abstract class Flux_Mailer
 
 	public function newEmail($subject = null, $message = null)
 	{
-		$email = new Flux_Mailer_Email($this->from, $this);
+		$email = new Email($this->from, $this);
 
 		if ($subject !== null)
 			$email->setSubject($subject);

@@ -1,0 +1,17 @@
+{
+	"name": "fluxbb/mailer",
+	"description": "An OOP library for construction of email messages, with underlying transport abstraction.",
+	"require": {	
+		"php": ">=5.3.0",
+		"patchwork/utf8": "1.0.*"
+	},
+	"require-dev": {
+		"mockery/mockery": "0.7.2"
+	},
+	"autoload": {
+		"psr-0": {
+			"FluxBB": "src"
+		}
+	},
+	"minimum-stability": "dev"
+}

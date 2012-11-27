@@ -1,8 +1,7 @@
 <?php
 /**
- * FluxBB
- *
- * LICENSE
+ * FluxBB Mailer - Lightweight email library with transport abstraction
+ * Copyright (C) 2011-2012 FluxBB.org
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -19,19 +18,16 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * @category	FluxBB
- * @package		Flux_Mailer
- * @copyright	Copyright (c) 2011 FluxBB (http://fluxbb.org)
+ * @package		Mailer
+ * @copyright	Copyright (c) 2011-2012 FluxBB (http://fluxbb.org)
  * @license		http://www.gnu.org/licenses/lgpl.html	GNU Lesser General Public License
  */
 
+namespace FluxBB\Mailer;
 
-if (!function_exists('utf8_is_ascii'))
-	require UTF8.'/utils/ascii.php';
+use Patchwork\Utf8;
 
-if (!function_exists('utf8_wordwrap'))
-	require UTF8.'/functions/wordwrap.php';
-
-class Flux_Mailer_Email
+class Email
 {
 	const MAILER_TAG = 'FluxBB Mailer';
 	const ATTACHMENT_LIMIT = 10485760; // 10Mb
@@ -40,7 +36,7 @@ class Flux_Mailer_Email
 	public static function encodeUtf8($str)
 	{
 		// Only encode the string if it does contain UTF8
-		if (!utf8_is_ascii($str))
+		if (Utf8::isUtf8($str))
 			return '=?UTF-8?B?'.base64_encode($str).'?=';
 
 		return $str;
@@ -188,7 +184,7 @@ class Flux_Mailer_Email
 		if ($message{0} == '.')
 			$message = '.'.$message;
 
-		return utf8_wordwrap($message, self::LINE_WIDTH, "\r\n");
+		return Utf8::wordwrap($message, self::LINE_WIDTH, "\r\n");
 	}
 
 	private function handleAttachments(&$headers, &$message)

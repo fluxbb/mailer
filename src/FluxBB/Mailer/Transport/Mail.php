@@ -1,11 +1,7 @@
 <?php
 /**
- * Sends email using PHPs built in mail() function
- * http://uk3.php.net/manual/en/function.mail.php
- *
- * FluxBB
- *
- * LICENSE
+ * FluxBB Mailer - Lightweight email library with transport abstraction
+ * Copyright (C) 2011-2012 FluxBB.org
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,13 +18,21 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * @category	FluxBB
- * @package		Flux_Mailer
- * @copyright	Copyright (c) 2011 FluxBB (http://fluxbb.org)
+ * @package		Mailer
+ * @copyright	Copyright (c) 2011-2012 FluxBB (http://fluxbb.org)
  * @license		http://www.gnu.org/licenses/lgpl.html	GNU Lesser General Public License
  */
 
+namespace FluxBB\Mailer\Transport;
 
-class Flux_Mailer_Transport_Mail extends Flux_Mailer
+use FluxBB\Mailer\Email,
+	FluxBB\Mailer\Mailer;
+
+/**
+ * Sends email using PHPs built in mail() function.
+ * http://uk3.php.net/manual/en/function.mail.php
+ */
+class Mail extends Mailer
 {
 	/**
 	 * Initialise a new basic PHP mailer.
@@ -57,6 +61,6 @@ class Flux_Mailer_Transport_Mail extends Flux_Mailer
 			unset ($headers['To']);
 		}
 
-		return mail($to, $subject, $message, Flux_Mailer_Email::createHeaderStr($headers));
+		return mail($to, $subject, $message, Email::createHeaderStr($headers));
 	}
 }

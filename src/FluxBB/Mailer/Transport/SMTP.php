@@ -1,10 +1,7 @@
 <?php
 /**
- * Sends email using SMTP
- *
- * FluxBB
- *
- * LICENSE
+ * FluxBB Mailer - Lightweight email library with transport abstraction
+ * Copyright (C) 2011-2012 FluxBB.org
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -21,13 +18,22 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * @category	FluxBB
- * @package		Flux_Mailer
- * @copyright	Copyright (c) 2011 FluxBB (http://fluxbb.org)
+ * @package		Mailer
+ * @copyright	Copyright (c) 2011-2012 FluxBB (http://fluxbb.org)
  * @license		http://www.gnu.org/licenses/lgpl.html	GNU Lesser General Public License
  */
 
+namespace FluxBB\Mailer\Transport;
 
-class Flux_Mailer_Transport_SMTP extends Flux_Mailer
+use FluxBB\Mailer\Email,
+	FluxBB\Mailer\Exception,
+	FluxBB\Mailer\Mailer,
+	FluxBB\Mailer\Transport\SMTP_Connection;
+
+/**
+ * Sends email using SMTP.
+ */
+class SMTP extends Mailer
 {
 	const DEFAULT_HOST = 'localhost';
 	const DEFAULT_PORT = 25;
@@ -62,11 +68,11 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		$starttls = isset($config['starttls']) ? $config['starttls'] : self::DEFAULT_STARTTLS;
 
 		// Create connection to the SMTP server
-		$this->connection = new Flux_Mailer_Transport_SMTP_Connection($host, $port, $ssl, $timeout);
+		$this->connection = new SMTP_Connection($host, $port, $ssl, $timeout);
 
 		// Check we received a valid welcome message (code 220)
 		$result = $this->connection->readResponse();
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVICE_READY)
+		if ($result['code'] != SMTP_Connection::SERVICE_READY)
 			throw new Exception('Invalid connection response code received: '.$result['code']);
 
 		// Negotiate and fetch a list of server supported extensions, if any
@@ -77,7 +83,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		{
 			$this->connection->write('STARTTLS');
 			$result = $this->connection->readResponse();
-			if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVICE_READY)
+			if ($result['code'] != SMTP_Connection::SERVICE_READY)
 				throw new Exception('STARTTLS was not accepted, response code: '.$result['code']);
 
 			// Enable TLS
@@ -108,12 +114,12 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		// Attempt to send EHLO command
 		$this->connection->write('EHLO '.$localhost);
 		$result = $this->connection->readResponse();
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::OKAY)
+		if ($result['code'] != SMTP_Connection::OKAY)
 		{
 			// EHLO was rejected, try a HELO
 			$this->connection->write('HELO '.$localhost);
 			$result = $this->connection->readResponse();
-			if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::OKAY)
+			if ($result['code'] != SMTP_Connection::OKAY)
 				throw new Exception('HELO was not accepted, response code: '.$result['code']);
 		}
 
@@ -171,9 +177,9 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		switch ($result['code'])
 		{
 			// Authentication Succeeded
-			case Flux_Mailer_Transport_SMTP_Connection::AUTH_SUCCESS: return true;
+			case SMTP_Connection::AUTH_SUCCESS: return true;
 			// Authentication credentials invalid
-			case Flux_Mailer_Transport_SMTP_Connection::AUTH_FAILURE: return false;
+			case SMTP_Connection::AUTH_FAILURE: return false;
 			// Other
 			default: throw new Exception('Unrecognized response to auth attempt: '.$result['code']);
 		}
@@ -183,7 +189,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 	{
 		$this->connection->write('AUTH DIGEST-MD5');
 		$result = $this->connection->readResponse();
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
+		if ($result['code'] != SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Parse the challenge and check it was valid
@@ -213,11 +219,11 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		$result = $this->connection->readResponse();
 
 		// We received a negative response so return now
-		if ($result['code'] == Flux_Mailer_Transport_SMTP_Connection::AUTH_FAILURE)
+		if ($result['code'] == SMTP_Connection::AUTH_FAILURE)
 			return $result;
 
 		// If we got this far, check it was the correct response and continue
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
+		if ($result['code'] != SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to AUTH DIGEST-MD5 attempt: '.$result['code']);
 
 		// SMTP doesn't allow subsequent authentication so we don't use this step
@@ -286,7 +292,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 	{
 		$this->connection->write('AUTH CRAM-MD5');
 		$result = $this->connection->readResponse();
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
+		if ($result['code'] != SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		$challenge = base64_decode($result['value']);
@@ -301,13 +307,13 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 	{
 		$this->connection->write('AUTH LOGIN');
 		$result = $this->connection->readResponse();
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
+		if ($result['code'] != SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Send the username
 		$this->connection->write(base64_encode($username));
 		$result = $this->connection->readResponse();
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
+		if ($result['code'] != SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Send the password
@@ -319,7 +325,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 	{
 		$this->connection->write('AUTH PLAIN');
 		$result = $this->connection->readResponse();
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::SERVER_CHALLENGE)
+		if ($result['code'] != SMTP_Connection::SERVER_CHALLENGE)
 			throw new Exception('Invalid response to auth attempt: '.$result['code']);
 
 		// Send the username and password
@@ -331,7 +337,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 	{
 		$this->connection->write('MAIL FROM: <'.$from.'>');
 		$result = $this->connection->readResponse();
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::OKAY)
+		if ($result['code'] != SMTP_Connection::OKAY)
 			throw new Exception('Invalid response to mail attempt: '.$result['code']);
 
 		// Add all the recipients
@@ -339,7 +345,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		{
 			$this->connection->write('RCPT TO: <'.$recipient.'>');
 			$result = $this->connection->readResponse();
-			if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::OKAY && $result['code'] != Flux_Mailer_Transport_SMTP_Connection::WILL_FORWARD)
+			if ($result['code'] != SMTP_Connection::OKAY && $result['code'] != SMTP_Connection::WILL_FORWARD)
 				throw new Exception('Invalid response to mail attempt: '.$result['code']);
 		}
 
@@ -350,7 +356,7 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		$data = '';
 
 		// Append the header strings
-		$data .= Flux_Mailer_Email::createHeaderStr($headers);
+		$data .= Email::createHeaderStr($headers);
 
 		// Append the header divider
 		$data .= "\r\n";
@@ -364,13 +370,13 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 		// Inform the server we are about to send data
 		$this->connection->write('DATA');
 		$result = $this->connection->readResponse();
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::START_INPUT)
+		if ($result['code'] != SMTP_Connection::START_INPUT)
 			throw new Exception('Invalid response to data request: '.$result['code']);
 
 		// Send the mail DATA
 		$this->connection->write($data);
 		$result = $this->connection->readResponse();
-		if ($result['code'] != Flux_Mailer_Transport_SMTP_Connection::OKAY)
+		if ($result['code'] != SMTP_Connection::OKAY)
 			throw new Exception('Invalid response to data terminaton: '.$result['code']);
 
 		return true;
@@ -387,123 +393,5 @@ class Flux_Mailer_Transport_SMTP extends Flux_Mailer
 			$this->connection->close();
 		}
 		catch (Exception $e) { } // Ignore errors since we are terminating anyway
-	}
-}
-
-class Flux_Mailer_Transport_SMTP_Connection
-{
-	const DEBUG = false;
-
-	// Response codes. See http://www.greenend.org.uk/rjk/2000/05/21/smtp-replies.html
-	const ERROR = -1;
-	const SERVICE_READY = 220;
-	const SERVICE_CLOSING = 221;
-	const AUTH_SUCCESS = 235;
-	const OKAY = 250;
-	const WILL_FORWARD = 251;
-	const SERVER_CHALLENGE = 334;
-	const START_INPUT = 354;
-	const AUTH_FAILURE = 535;
-
-	private $addr;
-	private $socket;
-	private $maxbuf;
-
-	public function __construct($hostname, $port, $secure, $timeout)
-	{
-		// Create a socket address
-		$this->addr = ($secure ? 'ssl' : 'tcp').'://'.$hostname.':'.$port;
-
-		$errno = null;
-		$errstr = null;
-		$this->socket = stream_socket_client($this->addr, $errno, $errstr, $timeout);
-		if ($this->socket === false)
-			throw new Exception($errstr);
-
-		$this->maxbuf = 65536;
-	}
-
-	public function setMaxbuf($maxbuf)
-	{
-		// Only update if the new limit is smaller than the existing limit
-		if ($maxbuf < $this->maxbuf)
-			$this->maxbuf = $maxbuf;
-	}
-
-	public function getMaxbuf()
-	{
-		return $this->maxbuf;
-	}
-
-	public function isSecure()
-	{
-		return parse_url($this->addr, PHP_URL_SCHEME) == 'ssl';
-	}
-
-	public function getHost()
-	{
-		return parse_url($this->addr, PHP_URL_HOST);
-	}
-
-	public function getPort()
-	{
-		return parse_url($this->addr, PHP_URL_PORT);
-	}
-
-	public function enableCrypto($enabled, $crypto_type)
-	{
-		return stream_socket_enable_crypto($this->socket, $enabled, $crypto_type);
-	}
-
-	public function readLine()
-	{
-		$line = fgets($this->socket);
-		if ($line === false)
-			return null;
-
-		$line = rtrim($line, "\r\n");
-		if (self::DEBUG)
-			echo $line.PHP_EOL;
-
-		return $line;
-	}
-
-	public function readResponse()
-	{
-		$code = self::ERROR;
-		$values = array();
-
-		while (($line = $this->readLine()) !== null)
-		{
-			$code = intval(substr($line, 0, 3));
-			$values[] = trim(substr($line, 4));
-
-			// If this is not a multiline response we're done
-			if ($line{3} != '-')
-				break;
-		}
-
-		return array('code' => $code, 'value' => implode("\r\n", $values));
-	}
-
-	public function write($line)
-	{
-		// Check the data + newline doesn't exceed the maximium buffer size
-		if (strlen($line) + 2 > $this->maxbuf)
-			throw new Exception('Message size exceeds server limit of '.$this->maxbuf);
-
-		if (self::DEBUG)
-			echo $line.PHP_EOL;
-
-		return fwrite($this->socket, $line."\r\n");
-	}
-
-	public function close()
-	{
-		if ($this->socket === null)
-			return;
-
-		fclose($this->socket);
-		$this->socket = null;
 	}
 }
