@@ -7,6 +7,8 @@ language: php
 php:
   - 5.3
 
+script: phpunit tests/
+
 notifications:
   irc:
     - "irc.freenode.org#fluxbb"
