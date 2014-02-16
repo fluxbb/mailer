@@ -1,8 +1,7 @@
 <?php
 /**
- * FluxBB
- *
- * LICENSE
+ * FluxBB Mailer - Lightweight email library with transport abstraction
+ * Copyright (C) 2011-2012 FluxBB.org
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -20,19 +19,31 @@
  *
  * @category	FluxBB
  * @package		Mailer
- * @subpackage	Tests
- * @copyright	Copyright (c) 2011 FluxBB (http://fluxbb.org)
+ * @copyright	Copyright (c) 2011-2012 FluxBB (http://fluxbb.org)
  * @license		http://www.gnu.org/licenses/lgpl.html	GNU Lesser General Public License
  */
 
-namespace fluxbb\mailer\tests;
+namespace FluxBB\Mailer\Transport;
 
-require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Mailer.php';
-require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Email.php';
-require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Exception.php';
-require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Transport/Mail.php';
+use FluxBB\Mailer\Email,
+	FluxBB\Mailer\Mailer;
 
-class MailTest extends \PHPUnit_Framework_TestCase
+class Mock extends Mailer
 {
+	/**
+	 * Initialise a new basic PHP mailer.
+	 */
+	public function __construct($config)
+	{
+	}
 
+	public function send($from, $recipients, $message, $headers)
+	{
+		return array(
+			'from'			=> $from,
+			'recipients'	=> $recipients,
+			'message'		=> $message,
+			'headers'		=> $headers
+		);
+	}
 }
