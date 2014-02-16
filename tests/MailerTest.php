@@ -37,7 +37,7 @@ class MailerTest extends \PHPUnit_Framework_TestCase
 
 	public function setUp()
 	{
-		$this->mailer = \FluxBB\Mailer\Mailer\load('Mock', 'test@fluxbb.org');
+		$this->mailer = \FluxBB\Mailer\Mailer::load('Mock', 'test@fluxbb.org');
 	}
 
 	public function testNewMail()
