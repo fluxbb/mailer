@@ -27,7 +27,7 @@
 
 namespace fluxbb\mailer\tests;
 
-require_once 'Patchwork/Utf8.php';
+require_once 'vendors/autoloader.php';
 
 require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Mailer.php';
 require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Email.php';
