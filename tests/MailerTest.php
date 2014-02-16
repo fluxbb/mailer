@@ -31,6 +31,8 @@ require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Mailer.php';
 require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Email.php';
 require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Exception.php';
 
+require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Transport/Mock.php';
+
 class MailerTest extends \PHPUnit_Framework_TestCase
 {
 	protected $mailer;
