@@ -41,14 +41,14 @@ class MailerTest extends \PHPUnit_Framework_TestCase
 
 	public function setUp()
 	{
-		$this->mailer = \FluxBB\Mailer\Mailer::load('Mock', 'test@fluxbb.org');
+		$this->mailer = \FluxBB\Mailer\Mailer::load('Mock', 'test.from@fluxbb.org');
 	}
 
 	public function testNewMail()
 	{
-		$result = $this->mailer->send($this->mailer->newEmail('subject', 'message'));
+		$result = $this->mailer->newEmail('subject', 'message')->send('test.to@fluxbb.org');
 
-		$this->assertEquals('test@fluxbb.org', $result['from']);
+		$this->assertEquals('test.from@fluxbb.org', $result['from']);
 		$this->assertEquals('subject', $result['subject']);
 		$this->assertEquals('message', $result['message']);
 	}
