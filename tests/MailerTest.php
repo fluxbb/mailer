@@ -27,7 +27,7 @@
 
 namespace fluxbb\mailer\tests;
 
-require_once dirname(__FILE__).'/../vendors/autoloader.php';
+require_once dirname(__FILE__).'/../vendor/autoload.php';
 
 require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Mailer.php';
 require_once dirname(__FILE__).'/../src/FluxBB/Mailer/Email.php';
