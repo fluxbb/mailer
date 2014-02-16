@@ -49,7 +49,7 @@ class MailerTest extends \PHPUnit_Framework_TestCase
 		$result = $this->mailer->newEmail('subject', 'message')->send('test.to@fluxbb.org');
 
 		$this->assertEquals('test.from@fluxbb.org', $result['from']);
-		$this->assertEquals('subject', $result['subject']);
+		$this->assertEquals('test.to@fluxbb.org', $result['headers']['To']);
 		$this->assertEquals('message', $result['message']);
 	}
 }
